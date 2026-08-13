@@ -4,8 +4,8 @@ const BUF_LEN: usize = size_of::<usize>() * 6;
 
 #[inline]
 #[must_use = "use to advance pos"]
-fn copy(dst: &mut [u8], src: &[u8]) -> usize {
-    dst[..src.len()].copy_from_slice(src);
+fn copy(dst: &mut [u8], src: &str) -> usize {
+    dst[..src.len()].copy_from_slice(src.as_bytes());
     src.len()
 }
 
@@ -22,6 +22,9 @@ impl<'w, W: Write + ?Sized> BufWrite<'w, W> {
 
     #[inline]
     pub(crate) fn write_hundreds(&mut self, n: u8) -> fmt::Result {
+        if n >= 100 {
+            return Err(fmt::Error);
+        }
         let spare = self.spare_mut();
         let dst = if 2 <= spare.len() { spare } else { self.flush()? };
         dst[0] = b'0' + n / 10;
@@ -47,10 +50,12 @@ impl<'w, W: Write + ?Sized> BufWrite<'w, W> {
     }
 
     fn flush_inner(&mut self) -> fmt::Result {
-        // SAFETY: pos never exceeds BUF_LEN
-        let filled = unsafe { self.buf.get_unchecked(..self.pos) };
-        // SAFETY: BufWrite always writes valid utf8 to buf
-        let s = unsafe { str::from_utf8_unchecked(filled) };
+        let s = unsafe {
+            // SAFETY: pos never exceeds BUF_LEN
+            let filled = self.buf.get_unchecked(..self.pos);
+            // SAFETY: BufWrite always writes valid utf8 to buf
+            str::from_utf8_unchecked(filled)
+        };
         self.inner.write_str(s)?;
         self.pos = 0;
         Ok(())
@@ -66,7 +71,7 @@ impl<'w, W: Write + ?Sized> BufWrite<'w, W> {
     fn copy_and_write_str(&mut self, s: &str) -> fmt::Result {
         let spare = self.spare_mut();
         let mid = s.floor_char_boundary(spare.len());
-        let (head, tail) = s.as_bytes().split_at(mid);
+        let (head, tail) = s.split_at(mid);
         Self::advance(copy(spare, head), self);
 
         let spare = self.flush()?;
@@ -74,7 +79,7 @@ impl<'w, W: Write + ?Sized> BufWrite<'w, W> {
             Self::advance(copy(spare, tail), self);
             Ok(())
         } else {
-            self.inner.write_str(s)
+            self.inner.write_str(tail)
         }
     }
 }
@@ -82,10 +87,9 @@ impl<'w, W: Write + ?Sized> BufWrite<'w, W> {
 impl<'w, W: Write + ?Sized> Write for BufWrite<'w, W> {
     #[inline]
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        let bytes = s.as_bytes();
         let spare = self.spare_mut();
-        if bytes.len() <= spare.len() {
-            Self::advance(copy(spare, bytes), self);
+        if s.len() <= spare.len() {
+            Self::advance(copy(spare, s), self);
             Ok(())
         } else {
             self.copy_and_write_str(s)
