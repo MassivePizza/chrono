@@ -132,18 +132,20 @@ impl<'a, I: Iterator<Item = B> + Clone, B: Borrow<Item<'a>>> DelayedFormat<I> {
     ) -> fmt::Result {
         use self::Numeric::*;
 
+        #[inline]
         fn write_one(w: &mut (impl Write + ?Sized), v: u8) -> fmt::Result {
+            debug_assert!(v < 10);
             w.write_char((b'0' + v) as char)
         }
 
         fn write_two(w: &mut (impl Write + ?Sized), v: u8, pad: Pad) -> fmt::Result {
-            let ones = b'0' + v % 10;
+            let ones = v % 10;
             match (v / 10, pad) {
                 (0, Pad::None) => {}
                 (0, Pad::Space) => w.write_char(' ')?,
-                (tens, _) => w.write_char((b'0' + tens) as char)?,
+                (tens, _) => write_one(w, tens)?,
             }
-            w.write_char(ones as char)
+            write_one(w, ones)
         }
 
         #[inline]
@@ -613,6 +615,7 @@ pub(crate) fn write_rfc2822(
 }
 
 /// Equivalent to `{:02}` formatting for n < 100.
+#[inline]
 pub(crate) fn write_hundreds(w: &mut (impl Write + ?Sized), n: u8) -> fmt::Result {
     if n >= 100 {
         return Err(fmt::Error);
