@@ -206,14 +206,14 @@ fn bench_format_with_items(c: &mut Criterion) {
 fn benches_delayed_format(c: &mut Criterion) {
     let mut group = c.benchmark_group("delayed_format");
     let dt = Local::now();
-    group.bench_function(BenchmarkId::new("with_display"), |b| {
+    group.bench_function("with_display", |b| {
         b.iter_batched(
             || dt.format("%Y-%m-%dT%H:%M:%S%.f%:z"),
             |df| black_box(df).to_string(),
             criterion::BatchSize::SmallInput,
         )
     });
-    group.bench_function(BenchmarkId::new("with_string_buffer"), |b| {
+    group.bench_function("with_string_buffer", |b| {
         b.iter_batched(
             || (dt.format("%Y-%m-%dT%H:%M:%S%.f%:z"), String::with_capacity(256)),
             |(df, string)| black_box(df).write_to(&mut black_box(string)),
