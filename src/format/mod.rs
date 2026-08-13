@@ -59,7 +59,6 @@ pub(crate) mod locales;
 
 pub(crate) use buf_write::BufWrite;
 pub use formatting::SecondsFormat;
-pub(crate) use formatting::write_hundreds;
 #[cfg(feature = "alloc")]
 pub(crate) use formatting::write_rfc2822;
 #[cfg(any(feature = "alloc", feature = "serde"))]

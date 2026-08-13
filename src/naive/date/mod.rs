@@ -32,8 +32,8 @@ use crate::datetime::UNIX_EPOCH_DAY;
 #[cfg(feature = "alloc")]
 use crate::format::DelayedFormat;
 use crate::format::{
-    Item, Numeric, Pad, ParseError, ParseResult, Parsed, StrftimeItems, parse, parse_and_remainder,
-    write_hundreds,
+    BufWrite, Item, Numeric, Pad, ParseError, ParseResult, Parsed, StrftimeItems, parse,
+    parse_and_remainder,
 };
 use crate::month::Months;
 use crate::naive::{Days, IsoWeek, NaiveDateTime, NaiveTime, NaiveWeek};
@@ -2370,22 +2370,30 @@ impl FusedIterator for NaiveDateWeeksIterator {}
 /// ```
 impl fmt::Debug for NaiveDate {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut f = BufWrite::new(f);
+        self.write_to(&mut f)?;
+        f.finish()
+    }
+}
+impl NaiveDate {
+    pub(crate) fn write_to(&self, f: &mut BufWrite<impl fmt::Write + ?Sized>) -> fmt::Result {
         use core::fmt::Write;
 
         let year = self.year();
         let mdf = self.mdf();
+
         if (0..=9999).contains(&year) {
-            write_hundreds(f, (year / 100) as u8)?;
-            write_hundreds(f, (year % 100) as u8)?;
+            f.write_hundreds((year / 100) as u8)?;
+            f.write_hundreds((year % 100) as u8)?;
         } else {
             // ISO 8601 requires the explicit sign for out-of-range years
             write!(f, "{year:+05}")?;
         }
 
         f.write_char('-')?;
-        write_hundreds(f, mdf.month() as u8)?;
+        f.write_hundreds(mdf.month() as u8)?;
         f.write_char('-')?;
-        write_hundreds(f, mdf.day() as u8)
+        f.write_hundreds(mdf.day() as u8)
     }
 }
 
