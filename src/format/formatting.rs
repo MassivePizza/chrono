@@ -11,12 +11,12 @@ use core::borrow::Borrow;
 use core::fmt::Display;
 use core::fmt::{self, Write};
 
-#[cfg(feature = "alloc")]
-use crate::offset::Offset;
 #[cfg(any(feature = "alloc", feature = "serde"))]
 use crate::{Datelike, FixedOffset, NaiveDateTime, Timelike};
 #[cfg(feature = "alloc")]
 use crate::{NaiveDate, NaiveTime, Weekday};
+#[cfg(feature = "alloc")]
+use crate::{format::buf_write::BufWrite, offset::Offset};
 
 #[cfg(feature = "alloc")]
 use super::locales;
@@ -340,9 +340,15 @@ impl<'a, I: Iterator<Item = B> + Clone, B: Borrow<Item<'a>>> DelayedFormat<I> {
 #[cfg(feature = "alloc")]
 impl<'a, I: Iterator<Item = B> + Clone, B: Borrow<Item<'a>>> Display for DelayedFormat<I> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut result = String::with_capacity(32);
-        self.write_to(&mut result)?;
-        f.pad(&result)
+        if f.width().is_none() && f.precision().is_none() {
+            let mut f = BufWrite::new(f);
+            self.write_to(&mut f)?;
+            f.finish()
+        } else {
+            let mut result = String::with_capacity(40);
+            self.write_to(&mut result)?;
+            f.pad(&result)
+        }
     }
 }
 
@@ -623,8 +629,10 @@ pub(crate) fn write_hundreds(w: &mut (impl Write + ?Sized), n: u8) -> fmt::Resul
 
     let tens = b'0' + n / 10;
     let ones = b'0' + n % 10;
-    w.write_char(tens as char)?;
-    w.write_char(ones as char)
+    let buf = [tens, ones];
+    // SAFETY: we only produce valid ASCII
+    let s = unsafe { str::from_utf8_unchecked(&buf) };
+    w.write_str(s)
 }
 
 #[cfg(test)]

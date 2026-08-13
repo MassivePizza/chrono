@@ -2,7 +2,7 @@ use core::fmt::{self, Write};
 
 const BUF_LEN: usize = size_of::<usize>() * 6;
 
-#[inline]
+#[inline(always)]
 #[must_use = "use to advance pos"]
 fn copy(dst: &mut [u8], src: &str) -> usize {
     dst[..src.len()].copy_from_slice(src.as_bytes());
@@ -33,19 +33,19 @@ impl<'w, W: Write + ?Sized> BufWrite<'w, W> {
         Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     fn spare_mut(&mut self) -> &mut [u8] {
         // SAFETY: pos never exceeds BUF_LEN
         unsafe { self.buf.get_unchecked_mut(self.pos..) }
     }
 
-    #[inline]
+    #[inline(always)]
     fn advance(n: usize, _self: &mut Self) {
         debug_assert!(_self.pos + n <= BUF_LEN);
         _self.pos += n;
     }
 
-    pub(crate) fn finish(&mut self) -> fmt::Result {
+    pub(crate) fn finish(mut self) -> fmt::Result {
         if self.pos > 0 { self.flush_inner() } else { Ok(()) }
     }
 
