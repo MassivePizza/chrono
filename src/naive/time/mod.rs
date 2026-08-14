@@ -16,7 +16,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 use crate::format::DelayedFormat;
 use crate::format::{
     BufWrite, Fixed, Item, Numeric, Pad, ParseError, ParseResult, Parsed, StrftimeItems, parse,
-    parse_and_remainder, write_hms, write_nanos_auto
+    parse_and_remainder, write_hms, write_nanos_auto,
 };
 use crate::{FixedOffset, TimeDelta, Timelike};
 use crate::{expect, try_opt};

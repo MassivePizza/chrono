@@ -33,7 +33,7 @@ use crate::datetime::UNIX_EPOCH_DAY;
 use crate::format::DelayedFormat;
 use crate::format::{
     BufWrite, Item, Numeric, Pad, ParseError, ParseResult, Parsed, StrftimeItems, parse,
-    parse_and_remainder, write_hundreds, write_four_digits,
+    parse_and_remainder, write_four_digits, write_hundreds,
 };
 use crate::month::Months;
 use crate::naive::{Days, IsoWeek, NaiveDateTime, NaiveTime, NaiveWeek};
