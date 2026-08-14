@@ -259,26 +259,26 @@ impl<'a, I: Iterator<Item = B> + Clone, B: Borrow<Item<'a>>> DelayedFormat<I> {
             }
             (Nanosecond3, _, Some(t), _) => {
                 w.write_str(decimal_point(self.locale))?;
-                write!(w, "{:03}", t.nanosecond() / 1_000_000 % 1000)
+                write_lz_pad3(w, t.nanosecond() / 1_000_000 % 1000)
             }
             (Nanosecond6, _, Some(t), _) => {
                 w.write_str(decimal_point(self.locale))?;
-                write!(w, "{:06}", t.nanosecond() / 1_000 % 1_000_000)
+                write_lz_pad6(w, t.nanosecond() / 1_000 % 1_000_000)
             }
             (Nanosecond9, _, Some(t), _) => {
                 w.write_str(decimal_point(self.locale))?;
-                write!(w, "{:09}", t.nanosecond() % 1_000_000_000)
+                write_lz_pad9(w, t.nanosecond() % 1_000_000_000)
             }
             (Internal(InternalFixed { val: Nanosecond3NoDot }), _, Some(t), _) => {
-                write!(w, "{:03}", t.nanosecond() / 1_000_000 % 1_000)
+                write_lz_pad3(w, t.nanosecond() / 1_000_000 % 1_000)
             }
             (Internal(InternalFixed { val: Nanosecond6NoDot }), _, Some(t), _) => {
-                write!(w, "{:06}", t.nanosecond() / 1_000 % 1_000_000)
+                write_lz_pad6(w, t.nanosecond() / 1_000 % 1_000_000)
             }
             (Internal(InternalFixed { val: Nanosecond9NoDot }), _, Some(t), _) => {
-                write!(w, "{:09}", t.nanosecond() % 1_000_000_000)
+                write_lz_pad9(w, t.nanosecond() % 1_000_000_000)
             }
-            (TimezoneName, _, _, Some((tz_name, _))) => write!(w, "{tz_name}"),
+            (TimezoneName, _, _, Some((tz_name, _))) => w.write_str(tz_name),
             (TimezoneOffset | TimezoneOffsetZ, _, _, Some((_, off))) => {
                 let offset_format = OffsetFormat {
                     precision: OffsetPrecision::Minutes,
@@ -523,9 +523,18 @@ pub(crate) fn write_rfc3339(
 
     match secform {
         SecondsFormat::Secs => {}
-        SecondsFormat::Millis => write!(w, ".{:03}", nano / 1_000_000)?,
-        SecondsFormat::Micros => write!(w, ".{:06}", nano / 1000)?,
-        SecondsFormat::Nanos => write!(w, ".{nano:09}")?,
+        SecondsFormat::Millis => {
+            w.write_char('.')?;
+            write_lz_pad3(w, nano / 1_000_000)?
+        }
+        SecondsFormat::Micros => {
+            w.write_char('.')?;
+            write_lz_pad6(w, nano / 1000)?
+        }
+        SecondsFormat::Nanos => {
+            w.write_char('.')?;
+            write_lz_pad9(w, nano)?
+        }
         SecondsFormat::AutoSi => {
             if nano != 0 {
                 w.write_char('.')?;
@@ -602,8 +611,7 @@ fn to_two_digits(n: u8) -> Result<[u8; 2], fmt::Error> {
 pub(crate) fn write_hundreds(w: &mut (impl Write + ?Sized), n: u8) -> fmt::Result {
     let buf = to_two_digits(n)?;
     // SAFETY: we only produce valid ASCII
-    let s = unsafe { str::from_utf8_unchecked(&buf) };
-    w.write_str(s)
+    w.write_str(unsafe { str::from_utf8_unchecked(&buf) })
 }
 
 /// Equivalent to `{:04}` formatting for n < 10000.
@@ -620,8 +628,7 @@ pub(crate) fn write_four_digits(w: &mut (impl Write + ?Sized), n: i32) -> fmt::R
     buf[2..4].copy_from_slice(&lo);
 
     // SAFETY: we only produce valid ASCII
-    let s = unsafe { str::from_utf8_unchecked(&buf) };
-    w.write_str(s)
+    w.write_str(unsafe { str::from_utf8_unchecked(&buf) })
 }
 
 #[inline]
@@ -644,19 +651,76 @@ pub(crate) fn write_hms(
     buf[6..8].copy_from_slice(&sec);
 
     // SAFETY: we only produce valid ASCII
-    let s = unsafe { str::from_utf8_unchecked(&buf) };
-    w.write_str(s)
+    w.write_str(unsafe { str::from_utf8_unchecked(&buf) })
+}
+
+pub(crate) fn write_nanos_auto(w: &mut (impl Write + ?Sized), nano: u32) -> fmt::Result {
+    if nano % 1_000_000 == 0 {
+        write_lz_pad3(w, nano / 1_000_000)
+    } else if nano % 1_000 == 0 {
+        write_lz_pad6(w, nano / 1_000)
+    } else {
+        write_lz_pad9(w, nano)
+    }
 }
 
 #[inline]
-pub(crate) fn write_nanos_auto(w: &mut (impl Write + ?Sized), nano: u32) -> fmt::Result {
-    if nano % 1_000_000 == 0 {
-        write!(w, "{:03}", nano / 1_000_000)
-    } else if nano % 1_000 == 0 {
-        write!(w, "{:06}", nano / 1_000)
-    } else {
-        write!(w, "{nano:09}")
+fn write_three_digits(out: &mut [u8], n: u32) -> fmt::Result {
+    if n > 999 {
+        return Err(fmt::Error);
     }
+    let head = n / 100;
+    let tail = n % 100;
+
+    let hund = b'0' + head as u8;
+    let tens = b'0' + (tail / 10) as u8;
+    let ones = b'0' + (tail % 10) as u8;
+    out[0] = hund;
+    out[1] = tens;
+    out[2] = ones;
+    Ok(())
+}
+
+#[inline]
+fn write_six_digits(out: &mut [u8], n: u32) -> fmt::Result {
+    if n > 999_999 {
+        return Err(fmt::Error);
+    }
+    let head = n / 1_000;
+    let tail = n % 1_000;
+    write_three_digits(&mut out[0..3], head)?;
+    write_three_digits(&mut out[3..6], tail)
+}
+
+fn write_lz_pad3(w: &mut (impl Write + ?Sized), n: u32) -> fmt::Result {
+    let mut out = [0; 3];
+    write_three_digits(&mut out, n)?;
+
+    // SAFETY: we only produce valid ASCII
+    w.write_str(unsafe { str::from_utf8_unchecked(&out) })
+}
+
+fn write_lz_pad6(w: &mut (impl Write + ?Sized), n: u32) -> fmt::Result {
+    let mut out = [0; 6];
+    write_six_digits(&mut out, n)?;
+
+    // SAFETY: we only produce valid ASCII
+    w.write_str(unsafe { str::from_utf8_unchecked(&out) })
+}
+
+fn write_lz_pad9(w: &mut (impl Write + ?Sized), n: u32) -> fmt::Result {
+    if n > 999_999_999 {
+        return Err(fmt::Error);
+    }
+    let head = n / 1_000_000;
+    let tail = n % 1_000_000;
+
+    let mut out = [0; 9];
+    write_three_digits(&mut out[0..3], head)?;
+    write_six_digits(&mut out[3..9], tail)?;
+
+    // SAFETY: we only produce valid ASCII
+    w.write_str(unsafe { str::from_utf8_unchecked(&out) })
 }
 
 #[cfg(test)]
