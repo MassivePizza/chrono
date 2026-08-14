@@ -254,7 +254,7 @@ impl<'a, I: Iterator<Item = B> + Clone, B: Borrow<Item<'a>>> DelayedFormat<I> {
                     Ok(())
                 } else {
                     w.write_str(decimal_point(self.locale))?;
-                    write_nanos(w, nano)
+                    write_nanos_auto(w, nano)
                 }
             }
             (Nanosecond3, _, Some(t), _) => {
@@ -529,7 +529,7 @@ pub(crate) fn write_rfc3339(
         SecondsFormat::AutoSi => {
             if nano != 0 {
                 w.write_char('.')?;
-                write_nanos(w, nano)?;
+                write_nanos_auto(w, nano)?;
             }
         }
         SecondsFormat::__NonExhaustive => unreachable!(),
@@ -649,7 +649,7 @@ pub(crate) fn write_hms(
 }
 
 #[inline]
-pub(crate) fn write_nanos(w: &mut (impl Write + ?Sized), nano: u32) -> fmt::Result {
+pub(crate) fn write_nanos_auto(w: &mut (impl Write + ?Sized), nano: u32) -> fmt::Result {
     if nano % 1_000_000 == 0 {
         write!(w, "{:03}", nano / 1_000_000)
     } else if nano % 1_000 == 0 {
