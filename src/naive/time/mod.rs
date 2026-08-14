@@ -871,6 +871,7 @@ impl NaiveTime {
     }
 
     /// Returns a triple of the hour, minute and second numbers.
+    #[inline]
     pub(crate) fn hms(&self) -> (u32, u32, u32) {
         let sec = self.secs % 60;
         let mins = self.secs / 60;

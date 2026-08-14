@@ -403,8 +403,7 @@ impl OffsetFormat {
     fn format(&self, w: &mut (impl Write + ?Sized), off: FixedOffset) -> fmt::Result {
         let off = off.local_minus_utc();
         if self.allow_zulu && off == 0 {
-            w.write_char('Z')?;
-            return Ok(());
+            return w.write_char('Z');
         }
         let (sign, off) = if off < 0 { ('-', -off) } else { ('+', off) };
 
@@ -509,7 +508,6 @@ pub enum SecondsFormat {
 }
 
 /// Writes the date, time and offset to the string. same as `%Y-%m-%dT%H:%M:%S%.f%:z`
-#[inline]
 #[cfg(any(feature = "alloc", feature = "serde"))]
 pub(crate) fn write_rfc3339(
     w: &mut (impl Write + ?Sized),

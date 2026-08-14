@@ -40,6 +40,7 @@ impl<'w, W: Write + ?Sized> BufWrite<'w, W> {
     }
 
     #[inline(always)]
+    #[track_caller]
     fn advance(n: usize, _self: &mut Self) {
         debug_assert!(_self.pos + n <= BUF_LEN);
         _self.pos += n;
