@@ -152,8 +152,7 @@ impl<'a, I: Iterator<Item = B> + Clone, B: Borrow<Item<'a>>> DelayedFormat<I> {
         fn write_year(w: &mut (impl Write + ?Sized), year: i32, pad: Pad) -> fmt::Result {
             if (1000..=9999).contains(&year) {
                 // fast path
-                write_hundreds(w, (year / 100) as u8)?;
-                write_hundreds(w, (year % 100) as u8)
+                write_four_digits(w, year)
             } else {
                 write_n(w, 4, year as i64, pad, !(0..10_000).contains(&year))
             }
@@ -516,18 +515,7 @@ pub(crate) fn write_rfc3339(
     secform: SecondsFormat,
     use_z: bool,
 ) -> fmt::Result {
-    let year = dt.date().year();
-    if (0..=9999).contains(&year) {
-        write_hundreds(w, (year / 100) as u8)?;
-        write_hundreds(w, (year % 100) as u8)?;
-    } else {
-        // ISO 8601 requires the explicit sign for out-of-range years
-        write!(w, "{year:+05}")?;
-    }
-    w.write_char('-')?;
-    write_hundreds(w, dt.date().month() as u8)?;
-    w.write_char('-')?;
-    write_hundreds(w, dt.date().day() as u8)?;
+    dt.date().write_to(w)?;
 
     w.write_char('T')?;
 
@@ -537,12 +525,7 @@ pub(crate) fn write_rfc3339(
         sec += 1;
         nano -= 1_000_000_000;
     }
-    write_hundreds(w, hour as u8)?;
-    w.write_char(':')?;
-    write_hundreds(w, min as u8)?;
-    w.write_char(':')?;
-    let sec = sec;
-    write_hundreds(w, sec as u8)?;
+    write_hms(w, hour, min, sec, b':')?;
 
     match secform {
         SecondsFormat::Secs => {}
@@ -550,13 +533,9 @@ pub(crate) fn write_rfc3339(
         SecondsFormat::Micros => write!(w, ".{:06}", nano / 1000)?,
         SecondsFormat::Nanos => write!(w, ".{nano:09}")?,
         SecondsFormat::AutoSi => {
-            if nano == 0 {
-            } else if nano % 1_000_000 == 0 {
-                write!(w, ".{:03}", nano / 1_000_000)?
-            } else if nano % 1_000 == 0 {
-                write!(w, ".{:06}", nano / 1_000)?
-            } else {
-                write!(w, ".{nano:09}")?
+            if nano != 0 {
+                w.write_char('.')?;
+                write_nanos(w, nano)?;
             }
         }
         SecondsFormat::__NonExhaustive => unreachable!(),
@@ -597,18 +576,14 @@ pub(crate) fn write_rfc2822(
     w.write_char(' ')?;
     w.write_str(short_months(english)[dt.month0() as usize])?;
     w.write_char(' ')?;
-    write_hundreds(w, (year / 100) as u8)?;
-    write_hundreds(w, (year % 100) as u8)?;
+    write_four_digits(w, year)?;
     w.write_char(' ')?;
 
     let (hour, min, sec) = dt.time().hms();
-    write_hundreds(w, hour as u8)?;
-    w.write_char(':')?;
-    write_hundreds(w, min as u8)?;
-    w.write_char(':')?;
     let sec = sec + dt.nanosecond() / 1_000_000_000;
-    write_hundreds(w, sec as u8)?;
+    write_hms(w, hour, min, sec, b':')?;
     w.write_char(' ')?;
+
     OffsetFormat {
         precision: OffsetPrecision::Minutes,
         colons: Colons::None,
@@ -618,19 +593,76 @@ pub(crate) fn write_rfc2822(
     .format(w, off)
 }
 
-/// Equivalent to `{:02}` formatting for n < 100.
-#[inline]
-pub(crate) fn write_hundreds(w: &mut (impl Write + ?Sized), n: u8) -> fmt::Result {
+#[inline(always)]
+fn to_two_digits(n: u8) -> Result<[u8; 2], fmt::Error> {
     if n >= 100 {
         return Err(fmt::Error);
     }
-
     let tens = b'0' + n / 10;
     let ones = b'0' + n % 10;
-    let buf = [tens, ones];
+    Ok([tens, ones])
+}
+
+/// Equivalent to `{:02}` formatting for n < 100.
+#[inline]
+pub(crate) fn write_hundreds(w: &mut (impl Write + ?Sized), n: u8) -> fmt::Result {
+    let buf = to_two_digits(n)?;
     // SAFETY: we only produce valid ASCII
     let s = unsafe { str::from_utf8_unchecked(&buf) };
     w.write_str(s)
+}
+
+/// Equivalent to `{:04}` formatting for n < 10000.
+#[inline]
+pub(crate) fn write_four_digits(w: &mut (impl Write + ?Sized), n: i32) -> fmt::Result {
+    if !(0..=9999).contains(&n) {
+        return Err(fmt::Error);
+    }
+    let hi = to_two_digits((n / 100) as u8)?;
+    let lo = to_two_digits((n % 100) as u8)?;
+
+    let mut buf = [0; 4];
+    buf[0..2].copy_from_slice(&hi);
+    buf[2..4].copy_from_slice(&lo);
+
+    // SAFETY: we only produce valid ASCII
+    let s = unsafe { str::from_utf8_unchecked(&buf) };
+    w.write_str(s)
+}
+
+#[inline]
+pub(crate) fn write_hms(
+    w: &mut (impl Write + ?Sized),
+    hour: u32,
+    min: u32,
+    sec: u32,
+    sep: u8,
+) -> fmt::Result {
+    let hour = to_two_digits(hour as u8)?;
+    let min = to_two_digits(min as u8)?;
+    let sec = to_two_digits(sec as u8)?;
+
+    let mut buf = [0; 8];
+    buf[0..2].copy_from_slice(&hour);
+    buf[2] = sep;
+    buf[3..5].copy_from_slice(&min);
+    buf[5] = sep;
+    buf[6..8].copy_from_slice(&sec);
+
+    // SAFETY: we only produce valid ASCII
+    let s = unsafe { str::from_utf8_unchecked(&buf) };
+    w.write_str(s)
+}
+
+#[inline]
+pub(crate) fn write_nanos(w: &mut (impl Write + ?Sized), nano: u32) -> fmt::Result {
+    if nano % 1_000_000 == 0 {
+        write!(w, "{:03}", nano / 1_000_000)
+    } else if nano % 1_000 == 0 {
+        write!(w, "{:06}", nano / 1_000)
+    } else {
+        write!(w, "{nano:09}")
+    }
 }
 
 #[cfg(test)]

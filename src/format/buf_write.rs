@@ -20,19 +20,6 @@ impl<'w, W: Write + ?Sized> BufWrite<'w, W> {
         Self { inner, pos: 0, buf: [0; BUF_LEN] }
     }
 
-    #[inline]
-    pub(crate) fn write_hundreds(&mut self, n: u8) -> fmt::Result {
-        if n >= 100 {
-            return Err(fmt::Error);
-        }
-        let spare = self.spare_mut();
-        let dst = if 2 <= spare.len() { spare } else { self.flush()? };
-        dst[0] = b'0' + n / 10;
-        dst[1] = b'0' + n % 10;
-        Self::advance(2, self);
-        Ok(())
-    }
-
     #[inline(always)]
     fn spare_mut(&mut self) -> &mut [u8] {
         // SAFETY: pos never exceeds BUF_LEN
