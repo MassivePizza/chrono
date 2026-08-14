@@ -254,13 +254,7 @@ impl<'a, I: Iterator<Item = B> + Clone, B: Borrow<Item<'a>>> DelayedFormat<I> {
                     Ok(())
                 } else {
                     w.write_str(decimal_point(self.locale))?;
-                    if nano % 1_000_000 == 0 {
-                        write!(w, "{:03}", nano / 1_000_000)
-                    } else if nano % 1_000 == 0 {
-                        write!(w, "{:06}", nano / 1_000)
-                    } else {
-                        write!(w, "{nano:09}")
-                    }
+                    write_nanos(w, nano)
                 }
             }
             (Nanosecond3, _, Some(t), _) => {
